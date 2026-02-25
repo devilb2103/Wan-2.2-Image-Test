@@ -363,9 +363,10 @@ class WanAnimate:
             context_null = text_encoder([n_prompt], torch.device('cpu'))
             context = [t.to(self.device) for t in context]
             context_null = [t.to(self.device) for t in context_null]
+        text_encoder.model.cpu()
         del text_encoder
-        torch.cuda.empty_cache()
         gc.collect()
+        torch.cuda.empty_cache()
         logging.info("T5 done, unloaded.")
 
         real_frame_len = len(cond_images)
@@ -572,8 +573,8 @@ class WanAnimate:
                 y_reft = torch.concat([msk_reft, y_reft]).to(dtype=self.param_dtype, device=self.device)
                 y = torch.concat([y_ref, y_reft], dim=1)
                 del vae
-                torch.cuda.empty_cache()
                 gc.collect()
+                torch.cuda.empty_cache()
 
                 # ── CLIP encode phase (load → encode → delete) ──
                 img = ref_pixel_values[0, :, 0]
@@ -581,8 +582,8 @@ class WanAnimate:
                 clip = CLIPModel(**self._clip_args)
                 clip_context = clip.visual([img[:, None, :, :]]).to(dtype=self.param_dtype, device=self.device)
                 del clip
-                torch.cuda.empty_cache()
                 gc.collect()
+                torch.cuda.empty_cache()
 
                 arg_c = {
                     "context": context,
@@ -660,8 +661,8 @@ class WanAnimate:
                     x0 = latents
 
                 del noise_model
-                torch.cuda.empty_cache()
                 gc.collect()
+                torch.cuda.empty_cache()
 
                 # ── VAE decode phase (load → decode → delete) ──
                 x0 = [x.to(dtype=torch.float32) for x in x0]
@@ -669,8 +670,8 @@ class WanAnimate:
                 vae = Wan2_1_VAE(vae_pth=self._vae_pth, device=self.device)
                 out_frames = torch.stack(vae.decode([x0[0][:, 1:]]))
                 del vae
-                torch.cuda.empty_cache()
                 gc.collect()
+                torch.cuda.empty_cache()
 
                 if start != 0:
                     out_frames = out_frames[:, :, refert_num:]
