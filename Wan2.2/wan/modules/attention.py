@@ -90,8 +90,14 @@ def flash_attention(
             'Flash attention 3 is not available, use flash attention 2 instead.'
         )
 
+    # Check if GPU supports flash attention (requires Ampere / sm80+)
+    _use_flash = False
+    if torch.cuda.is_available():
+        capability = torch.cuda.get_device_capability(q.device)
+        _use_flash = capability[0] >= 8  # Ampere = 8.0, Turing = 7.5
+
     # apply attention
-    if (version is None or version == 3) and FLASH_ATTN_3_AVAILABLE:
+    if _use_flash and (version is None or version == 3) and FLASH_ATTN_3_AVAILABLE:
         # Note: dropout_p, window_size are not supported in FA3 now.
         x = flash_attn_interface.flash_attn_varlen_func(
             q=q,
@@ -108,8 +114,7 @@ def flash_attention(
             softmax_scale=softmax_scale,
             causal=causal,
             deterministic=deterministic)[0].unflatten(0, (b, lq))
-    else:
-        assert FLASH_ATTN_2_AVAILABLE
+    elif _use_flash and FLASH_ATTN_2_AVAILABLE:
         x = flash_attn.flash_attn_varlen_func(
             q=q,
             k=k,
@@ -125,6 +130,17 @@ def flash_attention(
             causal=causal,
             window_size=window_size,
             deterministic=deterministic).unflatten(0, (b, lq))
+    else:
+        # Fallback: PyTorch SDPA (works on all GPUs including Turing/T4)
+        q2 = q.unflatten(0, (b, lq)).transpose(1, 2)
+        k2 = k.unflatten(0, (b, lk)).transpose(1, 2)
+        v2 = v.unflatten(0, (b, lk)).transpose(1, 2)
+        x = torch.nn.functional.scaled_dot_product_attention(
+            q2, k2, v2,
+            dropout_p=dropout_p,
+            is_causal=causal,
+            scale=softmax_scale,
+        ).transpose(1, 2)
 
     # output
     return x.type(out_dtype)
