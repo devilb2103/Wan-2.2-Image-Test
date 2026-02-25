@@ -13,6 +13,11 @@ try:
 except ImportError:
     flash_attn_func = None
 
+# T4 (Turing, sm75) doesn't support flash attention — fall back to torch SDPA
+_USE_FLASH = False
+if torch.cuda.is_available():
+    _USE_FLASH = torch.cuda.get_device_capability()[0] >= 8
+
 MEMORY_LAYOUT = {
     "flash": (
         lambda x: x.view(x.shape[0] * x.shape[1], *x.shape[2:]),
@@ -33,7 +38,7 @@ def attention(
     q,
     k,
     v,
-    mode="flash",
+    mode="flash" if _USE_FLASH else "torch",
     drop_rate=0,
     attn_mask=None,
     causal=False,
