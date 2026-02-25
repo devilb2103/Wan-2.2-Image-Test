@@ -7,7 +7,7 @@ import math
 
 def custom_qr(input_tensor):
     original_dtype = input_tensor.dtype
-    if original_dtype == torch.bfloat16:
+    if original_dtype in (torch.bfloat16, torch.float16):
         q, r = torch.linalg.qr(input_tensor.to(torch.float32))
         return q.to(original_dtype), r.to(original_dtype)
     return torch.linalg.qr(input_tensor)
