@@ -38,7 +38,7 @@ def attention(
     q,
     k,
     v,
-    mode="flash" if _USE_FLASH else "torch",
+    mode="flash",
     drop_rate=0,
     attn_mask=None,
     causal=False,
@@ -75,11 +75,19 @@ def attention(
         x = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=drop_rate, is_causal=causal)
 
     elif mode == "flash":
-        x = flash_attn_func(
-            q,
-            k,
-            v,
-        )
+        if _USE_FLASH:
+            x = flash_attn_func(
+                q,
+                k,
+                v,
+            )
+        else:
+            # SDPA fallback for Turing/T4 — match flash layout [b*s, a, d]
+            q2 = q.transpose(1, 2)  # [b, h, s, d]
+            k2 = k.transpose(1, 2)
+            v2 = v.transpose(1, 2)
+            x = F.scaled_dot_product_attention(q2, k2, v2, dropout_p=drop_rate, is_causal=causal)
+            x = x.transpose(1, 2)  # back to [b, s, h, d]
         x = x.view(batch_size, max_seqlen_q, x.shape[-2], x.shape[-1])  # reshape x to [b, s, a, d]
     elif mode == "vanilla":
         scale_factor = 1 / math.sqrt(q.size(-1))
